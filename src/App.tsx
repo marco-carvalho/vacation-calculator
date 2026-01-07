@@ -3,6 +3,29 @@ import Holidays, { HolidaysTypes } from "date-holidays";
 
 const hd = new Holidays();
 
+const HOLIDAY_TYPE_OPTIONS: Record<HolidaysTypes.HolidayType, { label: string; description: string }> = {
+  public: {
+    label: 'Public Holidays',
+    description: 'National holidays with paid time off (e.g., New Year, Christmas)'
+  },
+  bank: {
+    label: 'Bank Holidays',
+    description: 'Banking sector holidays'
+  },
+  school: {
+    label: 'School Holidays',
+    description: 'School breaks and recesses'
+  },
+  observance: {
+    label: 'Observances',
+    description: 'Commemorative dates without paid time off (e.g., Valentine\'s Day)'
+  },
+  optional: {
+    label: 'Optional Holidays',
+    description: 'Optional holidays that may vary by employer'
+  },
+};
+
 interface Holiday {
   date: Date;
   name: string;
@@ -15,6 +38,7 @@ interface FormData {
   maxVacationDays: number;
   startDate: Date;
   endDate: Date;
+  holidayTypes: Set<HolidaysTypes.HolidayType>;
 }
 
 interface VacationPeriod {
@@ -101,6 +125,15 @@ interface SelectFieldComponentProps extends SelectFieldProps {
 
 interface DateFieldComponentProps extends DateFieldProps {
   onChange: (date: Date) => void;
+}
+
+interface CheckboxGroupProps {
+  label: string;
+  icon: string;
+  options: Array<{ value: HolidaysTypes.HolidayType; label: string; description: string }>;
+  selectedValues: Set<HolidaysTypes.HolidayType>;
+  onChange: (value: HolidaysTypes.HolidayType, checked: boolean) => void;
+  tooltip: string;
 }
 
 const Card: React.FC<CardProps> = ({ children, className = "" }) => (
@@ -221,6 +254,40 @@ const DateField: React.FC<DateFieldComponentProps> = ({
   );
 };
 
+const CheckboxGroup: React.FC<CheckboxGroupProps> = ({
+  label,
+  icon,
+  options,
+  selectedValues,
+  onChange,
+  tooltip,
+}) => {
+  return (
+    <div className="space-y-2">
+      <label className="block text-gray-700">
+        <span className="inline-block mr-2">{icon}</span> {label}
+        {tooltip && <Tooltip text={tooltip} />}
+      </label>
+      <div className="space-y-3 p-3 border border-gray-300 rounded-md bg-gray-50">
+        {options.map((option) => (
+          <label key={option.value} className="flex items-start cursor-pointer hover:bg-gray-100 p-2 rounded transition-colors">
+            <input
+              type="checkbox"
+              checked={selectedValues.has(option.value)}
+              onChange={(e) => onChange(option.value, e.target.checked)}
+              className="mt-1 mr-3 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded cursor-pointer"
+            />
+            <div className="flex-1">
+              <div className="font-medium text-gray-900">{option.label}</div>
+              <div className="text-sm text-gray-500">{option.description}</div>
+            </div>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 const VacationCalculator: React.FC = () => {
   const [showCalendars, setShowCalendars] = useState<boolean>(false);
   const [vacationPeriods, setVacationPeriods] = useState<VacationPeriod[]>([]);
@@ -246,6 +313,7 @@ const VacationCalculator: React.FC = () => {
     maxVacationDays: 30,
     startDate: getCurrentDate(),
     endDate: getDateOneYearFromNow(),
+    holidayTypes: new Set(['public']),
   });
 
   const holidays = useMemo(() => {
@@ -266,6 +334,10 @@ const VacationCalculator: React.FC = () => {
       const yearHolidays = holidayCalendar.getHolidays(year);
 
       yearHolidays.forEach((h: HolidaysTypes.Holiday) => {
+        if (!formData.holidayTypes.has(h.type)) {
+          return;
+        }
+
         const start = new Date(h.start);
         const end = new Date(h.end);
 
@@ -287,6 +359,7 @@ const VacationCalculator: React.FC = () => {
     formData.startDate,
     formData.workCountry,
     formData.workState,
+    formData.holidayTypes,
   ]);
 
   const handleInputChange = (
@@ -471,7 +544,6 @@ const VacationCalculator: React.FC = () => {
       return candidatePeriods.map(cp => cp.period);
     };
 
-    // Collect all candidate periods for all vacation day counts
     const allCandidatePeriods: VacationPeriod[] = [];
 
     for (let vacationDays = minVacationDays; vacationDays <= maxVacationDays; vacationDays++) {
@@ -485,12 +557,10 @@ const VacationCalculator: React.FC = () => {
         );
         allCandidatePeriods.push(...periods);
       } catch {
-        // Continue if no valid periods found for this vacation day count
         console.warn(`No valid periods found for ${vacationDays} vacation days`);
       }
     }
 
-    // Filter out periods with 0 extra days and sort by extra days (descending), then by start date (ascending)
     const filteredPeriods = allCandidatePeriods.filter(period => {
       const totalDays = calculateTotalDaysOff(period);
       const extraDays = totalDays - period.daysCount;
@@ -507,7 +577,6 @@ const VacationCalculator: React.FC = () => {
         return extraDaysB - extraDaysA;
       }
 
-      // If extra days are equal, sort by start date
       return a.usedStartDate.getTime() - b.usedStartDate.getTime();
     });
 
@@ -528,6 +597,19 @@ const VacationCalculator: React.FC = () => {
     setFormData({
       ...formData,
       endDate: date,
+    });
+  };
+
+  const handleHolidayTypeChange = (type: HolidaysTypes.HolidayType, checked: boolean): void => {
+    const newTypes = new Set(formData.holidayTypes);
+    if (checked) {
+      newTypes.add(type);
+    } else {
+      newTypes.delete(type);
+    }
+    setFormData({
+      ...formData,
+      holidayTypes: newTypes,
     });
   };
 
@@ -856,6 +938,21 @@ const VacationCalculator: React.FC = () => {
                   </FormSection>
 
                   <FormSection>
+                    <CheckboxGroup
+                      label="Holiday Types to Consider"
+                      icon="🏝️"
+                      options={Object.entries(HOLIDAY_TYPE_OPTIONS).map(([value, { label, description }]) => ({
+                        value: value as HolidaysTypes.HolidayType,
+                        label,
+                        description
+                      }))}
+                      selectedValues={formData.holidayTypes}
+                      onChange={handleHolidayTypeChange}
+                      tooltip="Select which types of holidays should be considered as days off in the calculation"
+                    />
+                  </FormSection>
+
+                  <FormSection>
                     <NumberInputField
                       label="Min Vacation Days"
                       name="minVacationDays"
@@ -935,7 +1032,6 @@ const VacationCalculator: React.FC = () => {
 
                 <Card className="p-4">
                   {(() => {
-                    // Group periods by extra days
                     const periodsByExtraDays = new Map<number, VacationPeriod[]>();
 
                     vacationPeriods.forEach(period => {
@@ -950,7 +1046,6 @@ const VacationCalculator: React.FC = () => {
                       periodsByExtraDays.get(extraDays)!.push(period);
                     });
 
-                    // Sort by extra days (descending)
                     const sortedExtraDays = Array.from(periodsByExtraDays.keys()).sort((a, b) => b - a);
 
                     const formatDate = (date: Date): string => {
