@@ -383,6 +383,137 @@ function CheckboxGroup({
   );
 }
 
+interface ThemeToggleButtonProps {
+  isDark: boolean;
+  onToggle: () => void;
+}
+
+function ThemeToggleButton({ isDark, onToggle }: ThemeToggleButtonProps) {
+  const label = isDark ? "Switch to light mode" : "Switch to dark mode";
+
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="p-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-gray-50 dark:focus:ring-offset-gray-900"
+      title={label}
+      aria-label={label}
+    >
+      {isDark ? (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="w-5 h-5"
+        >
+          <circle cx="12" cy="12" r="5" />
+          <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+        </svg>
+      ) : (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="w-5 h-5"
+        >
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
+interface OptionsTriggerButtonProps {
+  isOpen: boolean;
+}
+
+function OptionsTriggerButton({ isOpen }: OptionsTriggerButtonProps) {
+  const label = isOpen ? "Close options" : "Open options";
+
+  return (
+    <Dialog.Trigger asChild>
+      <button
+        type="button"
+        className="flex items-center justify-center p-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-gray-50 dark:focus:ring-offset-gray-900"
+        title={label}
+        aria-label={label}
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="w-5 h-5"
+        >
+          <line x1="3" y1="6" x2="21" y2="6" />
+          <line x1="3" y1="12" x2="21" y2="12" />
+          <line x1="3" y1="18" x2="21" y2="18" />
+        </svg>
+      </button>
+    </Dialog.Trigger>
+  );
+}
+
+function toSortedOptions(entries: [string, unknown][]): SelectOption[] {
+  return entries
+    .map(([code, name]) => ({
+      value: code,
+      label: name as string,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+function getCountryOptions(): SelectOption[] {
+  return toSortedOptions(Object.entries(hd.getCountries()));
+}
+
+function getStateOptions(country: string): SelectOption[] {
+  if (!country) {
+    return [];
+  }
+
+  return [
+    { value: "", label: "-" },
+    ...toSortedOptions(Object.entries(hd.getStates(country) || {})),
+  ];
+}
+
+function isWithinRange(
+  date: Temporal.PlainDate,
+  start: Temporal.PlainDate,
+  end: Temporal.PlainDate,
+): boolean {
+  return (
+    Temporal.PlainDate.compare(date, start) >= 0 &&
+    Temporal.PlainDate.compare(date, end) <= 0
+  );
+}
+
+function getDayCellClassName(
+  isVacationDay: boolean,
+  isExtraDay: boolean,
+): string {
+  const base = "text-sm py-1 text-gray-900 dark:text-gray-100 ";
+  if (isVacationDay) {
+    return `${base}rounded-full bg-indigo-500 text-white font-medium`;
+  }
+  if (isExtraDay) {
+    return `${base}rounded-full bg-indigo-100 dark:bg-indigo-500/40 text-indigo-800 dark:text-indigo-200 font-medium`;
+  }
+  return base;
+}
+
 const THEME_KEY = "vacation-calculator-theme";
 
 function VacationCalculator() {
@@ -566,7 +697,9 @@ function VacationCalculator() {
       existingPeriods: VacationPeriod[],
       minGapBetweenPeriods: number,
     ): boolean => {
-      const bufferStartDate = startDate.subtract({ days: minGapBetweenPeriods });
+      const bufferStartDate = startDate.subtract({
+        days: minGapBetweenPeriods,
+      });
       const bufferEndDate = endDate.add({ days: minGapBetweenPeriods });
 
       for (const period of existingPeriods) {
@@ -833,32 +966,32 @@ function VacationCalculator() {
 
             const currentDate = month.with({ day });
 
-            const isVacationDay =
-              Temporal.PlainDate.compare(currentDate, usedStartDate) >= 0 &&
-              Temporal.PlainDate.compare(currentDate, usedEndDate) <= 0;
+            const isVacationDay = isWithinRange(
+              currentDate,
+              usedStartDate,
+              usedEndDate,
+            );
+
+            const isAroundVacation =
+              isWithinRange(
+                currentDate,
+                startDate,
+                usedStartDate.subtract({ days: 1 }),
+              ) ||
+              isWithinRange(currentDate, usedEndDate.add({ days: 1 }), endDate);
 
             const isExtraDay =
-              ((Temporal.PlainDate.compare(currentDate, startDate) >= 0 &&
-                Temporal.PlainDate.compare(currentDate, usedStartDate) < 0) ||
-                (Temporal.PlainDate.compare(currentDate, usedEndDate) > 0 &&
-                  Temporal.PlainDate.compare(currentDate, endDate) <= 0)) &&
+              isAroundVacation &&
               (isWeekend(currentDate) || isHolidayDate(currentDate));
 
             const showHolidayIcon = isHolidayDate(currentDate);
-            const holidayName = showHolidayIcon
-              ? getHolidayName(currentDate)
-              : "";
-
-            let className = "text-sm py-1 text-gray-900 dark:text-gray-100 ";
-            if (isVacationDay) {
-              className += "rounded-full bg-indigo-500 text-white font-medium";
-            } else if (isExtraDay) {
-              className +=
-                "rounded-full bg-indigo-100 dark:bg-indigo-500/40 text-indigo-800 dark:text-indigo-200 font-medium";
-            }
 
             return (
-              <div key={index} className={className} title={holidayName}>
+              <div
+                key={index}
+                className={getDayCellClassName(isVacationDay, isExtraDay)}
+                title={showHolidayIcon ? getHolidayName(currentDate) : ""}
+              >
                 {day} {showHolidayIcon && <span>🏝️</span>}
               </div>
             );
@@ -888,8 +1021,7 @@ function VacationCalculator() {
 
     const usedDays = daysCount;
 
-    const totalDays =
-      startDate.until(endDate, { largestUnit: "day" }).days + 1;
+    const totalDays = startDate.until(endDate, { largestUnit: "day" }).days + 1;
 
     const extraDays = totalDays - usedDays;
 
@@ -977,24 +1109,8 @@ function VacationCalculator() {
     );
   }
 
-  const countryOptions: SelectOption[] = Object.entries(hd.getCountries())
-    .map(([code, name]) => ({
-      value: code,
-      label: name as string,
-    }))
-    .sort((a, b) => a.label.localeCompare(b.label));
-
-  const stateOptions: SelectOption[] = formData.workCountry
-    ? [
-        { value: "", label: "-" },
-        ...Object.entries(hd.getStates(formData.workCountry) || {})
-          .map(([code, name]) => ({
-            value: code,
-            label: name as string,
-          }))
-          .sort((a, b) => a.label.localeCompare(b.label)),
-      ]
-    : [];
+  const countryOptions = getCountryOptions();
+  const stateOptions = getStateOptions(formData.workCountry);
 
   return (
     <div className="min-h-dvh bg-gray-50 dark:bg-gray-900">
@@ -1002,72 +1118,13 @@ function VacationCalculator() {
         <Dialog.Root open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
           {/* Header: title top left, theme + options (hamburger) top right */}
           <header className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
-            Vacation Calculator
-          </h1>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="p-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-gray-50 dark:focus:ring-offset-gray-900"
-              title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-              aria-label={
-                isDark ? "Switch to light mode" : "Switch to dark mode"
-              }
-            >
-              {isDark ? (
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="w-5 h-5"
-                >
-                  <circle cx="12" cy="12" r="5" />
-                  <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
-                </svg>
-              ) : (
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="w-5 h-5"
-                >
-                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-                </svg>
-              )}
-            </button>
-              <Dialog.Trigger asChild>
-                <button
-                  type="button"
-                  className="flex items-center justify-center p-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-gray-50 dark:focus:ring-offset-gray-900"
-                  title={isDrawerOpen ? "Close options" : "Open options"}
-                  aria-label={isDrawerOpen ? "Close options" : "Open options"}
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="w-5 h-5"
-                  >
-                    <line x1="3" y1="6" x2="21" y2="6" />
-                    <line x1="3" y1="12" x2="21" y2="12" />
-                    <line x1="3" y1="18" x2="21" y2="18" />
-                  </svg>
-                </button>
-              </Dialog.Trigger>
-          </div>
+            <h1 className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
+              Vacation Calculator
+            </h1>
+            <div className="flex items-center gap-2">
+              <ThemeToggleButton isDark={isDark} onToggle={toggleTheme} />
+              <OptionsTriggerButton isOpen={isDrawerOpen} />
+            </div>
           </header>
 
           <Dialog.Portal>
@@ -1137,63 +1194,70 @@ function VacationCalculator() {
                 <FormSection>
                   <div className="space-y-2">
                     <label className="block text-gray-700 dark:text-gray-300">
-                      <span className="inline-block mr-2">📅</span> Holidays in date range
+                      <span className="inline-block mr-2">📅</span> Holidays in
+                      date range
                     </label>
                     <div className="h-48 overflow-y-auto rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700/50">
-                    {formData.holidayTypes.size === 0 ? (
-                      <div className="p-3 text-sm text-gray-500 dark:text-gray-400">
-                        Select at least one holiday type above.
-                      </div>
-                    ) : (() => {
-                      const { startDate, endDate } = formData;
-                      const inRange =
-                        startDate && endDate
-                          ? holidays
-                              .filter(
-                                (h) =>
-                                  Temporal.PlainDate.compare(
-                                    h.date,
-                                    startDate,
-                                  ) >= 0 &&
-                                  Temporal.PlainDate.compare(
-                                    h.date,
-                                    endDate,
-                                  ) <= 0,
-                              )
-                              .sort((a, b) =>
-                                Temporal.PlainDate.compare(a.date, b.date),
-                              )
-                          : [];
-                      const formatDate = (d: Temporal.PlainDate) =>
-                        `${d.day.toString().padStart(2, "0")}/${d.month.toString().padStart(2, "0")}/${d.year}`;
-                      return inRange.length === 0 ? (
+                      {formData.holidayTypes.size === 0 ? (
                         <div className="p-3 text-sm text-gray-500 dark:text-gray-400">
-                          No holidays in the selected date range.
+                          Select at least one holiday type above.
                         </div>
                       ) : (
-                        <table className="w-full text-sm text-left">
-                          <thead className="sticky top-0 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200">
-                            <tr>
-                              <th className="px-3 py-2 font-medium">Date</th>
-                              <th className="px-3 py-2 font-medium">Name</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {inRange.map((h, i) => (
-                              <tr
-                                key={`${h.date.toString()}-${i}`}
-                                className="border-t border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-100"
-                              >
-                                <td className="px-3 py-1.5 whitespace-nowrap">
-                                  {formatDate(h.date)}
-                                </td>
-                                <td className="px-3 py-1.5">{h.name}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      );
-                    })()}
+                        (() => {
+                          const { startDate, endDate } = formData;
+                          const inRange =
+                            startDate && endDate
+                              ? holidays
+                                  .filter(
+                                    (h) =>
+                                      Temporal.PlainDate.compare(
+                                        h.date,
+                                        startDate,
+                                      ) >= 0 &&
+                                      Temporal.PlainDate.compare(
+                                        h.date,
+                                        endDate,
+                                      ) <= 0,
+                                  )
+                                  .sort((a, b) =>
+                                    Temporal.PlainDate.compare(a.date, b.date),
+                                  )
+                              : [];
+                          const formatDate = (d: Temporal.PlainDate) =>
+                            `${d.day.toString().padStart(2, "0")}/${d.month.toString().padStart(2, "0")}/${d.year}`;
+                          return inRange.length === 0 ? (
+                            <div className="p-3 text-sm text-gray-500 dark:text-gray-400">
+                              No holidays in the selected date range.
+                            </div>
+                          ) : (
+                            <table className="w-full text-sm text-left">
+                              <thead className="sticky top-0 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200">
+                                <tr>
+                                  <th className="px-3 py-2 font-medium">
+                                    Date
+                                  </th>
+                                  <th className="px-3 py-2 font-medium">
+                                    Name
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {inRange.map((h, i) => (
+                                  <tr
+                                    key={`${h.date.toString()}-${i}`}
+                                    className="border-t border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-100"
+                                  >
+                                    <td className="px-3 py-1.5 whitespace-nowrap">
+                                      {formatDate(h.date)}
+                                    </td>
+                                    <td className="px-3 py-1.5">{h.name}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          );
+                        })()
+                      )}
                     </div>
                   </div>
                 </FormSection>
@@ -1201,7 +1265,8 @@ function VacationCalculator() {
                 <FormSection>
                   <div className="space-y-2">
                     <label className="block text-gray-700 dark:text-gray-300">
-                      <span className="inline-block mr-2">📆</span> Vacation Days
+                      <span className="inline-block mr-2">📆</span> Vacation
+                      Days
                       <Tooltip text="Range: try every count from min to max. List: try only the specific counts you enter." />
                     </label>
                     <div className="flex rounded-md border border-gray-300 dark:border-gray-600 overflow-hidden">
