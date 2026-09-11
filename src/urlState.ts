@@ -10,8 +10,8 @@ export interface FormData {
   minVacationDays: number;
   maxVacationDays: number;
   vacationDaysList: number[];
-  startDate: Temporal.PlainDate | null;
-  endDate: Temporal.PlainDate | null;
+  windowStart: Temporal.PlainDate | null;
+  windowEnd: Temporal.PlainDate | null;
   holidayTypes: Set<HolidaysTypes.HolidayType>;
 }
 
@@ -34,8 +34,8 @@ export function getDefaultFormData(): FormData {
     minVacationDays: 5,
     maxVacationDays: 30,
     vacationDaysList: [5, 10, 15],
-    startDate: today,
-    endDate: today.add({ years: 1 }),
+    windowStart: today,
+    windowEnd: today.add({ years: 1 }),
     holidayTypes: new Set(["public"]),
   };
 }
@@ -125,8 +125,8 @@ export function parseFormDataFromSearch(search: string): FormData {
       params.get("days"),
       defaults.vacationDaysList,
     ),
-    startDate: parseDate(params.get("start")) ?? defaults.startDate,
-    endDate: parseDate(params.get("end")) ?? defaults.endDate,
+    windowStart: parseDate(params.get("start")) ?? defaults.windowStart,
+    windowEnd: parseDate(params.get("end")) ?? defaults.windowEnd,
     holidayTypes: parseHolidayTypes(
       params.get("holidays"),
       defaults.holidayTypes,
@@ -217,14 +217,15 @@ export function serializeFormData(form: FormData): string {
   setIfChanged(
     params,
     "start",
-    form.startDate?.toString() ?? "",
-    !sameDate(form.startDate, defaults.startDate) && form.startDate != null,
+    form.windowStart?.toString() ?? "",
+    !sameDate(form.windowStart, defaults.windowStart) &&
+      form.windowStart != null,
   );
   setIfChanged(
     params,
     "end",
-    form.endDate?.toString() ?? "",
-    !sameDate(form.endDate, defaults.endDate) && form.endDate != null,
+    form.windowEnd?.toString() ?? "",
+    !sameDate(form.windowEnd, defaults.windowEnd) && form.windowEnd != null,
   );
   setIfChanged(
     params,

@@ -49,11 +49,11 @@ interface Holiday {
 }
 
 interface VacationPeriod {
-  startDate: Temporal.PlainDate;
-  endDate: Temporal.PlainDate;
-  usedStartDate: Temporal.PlainDate;
-  usedEndDate: Temporal.PlainDate;
-  daysCount: number;
+  offStart: Temporal.PlainDate;
+  offEnd: Temporal.PlainDate;
+  vacationStart: Temporal.PlainDate;
+  vacationEnd: Temporal.PlainDate;
+  vacationDays: number;
 }
 
 interface SelectOption {
@@ -107,19 +107,19 @@ interface DateFieldProps {
 
 interface CalendarMonthProps {
   month: Temporal.PlainDate;
-  startDate: Temporal.PlainDate;
-  endDate: Temporal.PlainDate;
-  usedStartDate: Temporal.PlainDate;
-  usedEndDate: Temporal.PlainDate;
+  offStart: Temporal.PlainDate;
+  offEnd: Temporal.PlainDate;
+  vacationStart: Temporal.PlainDate;
+  vacationEnd: Temporal.PlainDate;
   dayNames: string[];
 }
 
 interface CalendarViewProps {
-  startDate: Temporal.PlainDate;
-  endDate: Temporal.PlainDate;
-  usedStartDate: Temporal.PlainDate;
-  usedEndDate: Temporal.PlainDate;
-  daysCount: number;
+  offStart: Temporal.PlainDate;
+  offEnd: Temporal.PlainDate;
+  vacationStart: Temporal.PlainDate;
+  vacationEnd: Temporal.PlainDate;
+  vacationDays: number;
 }
 
 interface NumberInputFieldComponentProps extends NumberInputFieldProps {
@@ -530,15 +530,15 @@ function VacationCalculator() {
   );
 
   const holidays = useMemo(() => {
-    if (!formData.startDate || !formData.endDate) {
+    if (!formData.windowStart || !formData.windowEnd) {
       return [];
     }
 
     const holidayCalendar = hd;
     holidayCalendar.init(formData.workCountry, formData.workState);
 
-    const startYear = formData.startDate.year;
-    const endYear = formData.endDate.year;
+    const startYear = formData.windowStart.year;
+    const endYear = formData.windowEnd.year;
 
     const holidayList: Holiday[] = [];
 
@@ -574,8 +574,8 @@ function VacationCalculator() {
 
     return holidayList;
   }, [
-    formData.endDate,
-    formData.startDate,
+    formData.windowEnd,
+    formData.windowStart,
     formData.workCountry,
     formData.workState,
     formData.holidayTypes,
@@ -590,10 +590,12 @@ function VacationCalculator() {
   };
 
   const hasErrors = (): boolean => {
-    if (!formData.startDate || !formData.endDate) {
+    if (!formData.windowStart || !formData.windowEnd) {
       return true;
     }
-    if (Temporal.PlainDate.compare(formData.endDate, formData.startDate) <= 0)
+    if (
+      Temporal.PlainDate.compare(formData.windowEnd, formData.windowStart) <= 0
+    )
       return true;
 
     if (formData.vacationDaysMode === "range") {
@@ -617,62 +619,54 @@ function VacationCalculator() {
   };
 
   const handleCalculate = (): void => {
-    const { minVacationDays, maxVacationDays, startDate, endDate } = formData;
+    const { minVacationDays, maxVacationDays, windowStart, windowEnd } =
+      formData;
 
-    if (!startDate || !endDate) return;
+    if (!windowStart || !windowEnd) return;
 
-    const currentStartDate = startDate;
-    const searchEndDate = endDate;
-
-    const calculateExtraStartDate = (
-      vacationStartDate: Temporal.PlainDate,
+    const calculateOffStart = (
+      vacationStart: Temporal.PlainDate,
     ): Temporal.PlainDate => {
-      let extraStartDate = vacationStartDate;
-      let tempDate = vacationStartDate.subtract({ days: 1 });
+      let offStart = vacationStart;
+      let tempDate = vacationStart.subtract({ days: 1 });
 
-      while (
-        Temporal.PlainDate.compare(tempDate, currentStartDate) >= 0 &&
-        isWeekendOrHoliday(tempDate)
-      ) {
-        extraStartDate = extraStartDate.subtract({ days: 1 });
+      while (isWeekendOrHoliday(tempDate)) {
+        offStart = offStart.subtract({ days: 1 });
         tempDate = tempDate.subtract({ days: 1 });
       }
 
-      return extraStartDate;
+      return offStart;
     };
 
-    const calculateExtraEndDate = (
-      vacationEndDate: Temporal.PlainDate,
+    const calculateOffEnd = (
+      vacationEnd: Temporal.PlainDate,
     ): Temporal.PlainDate => {
-      let extraEndDate = vacationEndDate;
-      let tempDate = vacationEndDate.add({ days: 1 });
+      let offEnd = vacationEnd;
+      let tempDate = vacationEnd.add({ days: 1 });
 
-      while (
-        Temporal.PlainDate.compare(tempDate, searchEndDate) <= 0 &&
-        isWeekendOrHoliday(tempDate)
-      ) {
-        extraEndDate = extraEndDate.add({ days: 1 });
+      while (isWeekendOrHoliday(tempDate)) {
+        offEnd = offEnd.add({ days: 1 });
         tempDate = tempDate.add({ days: 1 });
       }
 
-      return extraEndDate;
+      return offEnd;
     };
 
     const checkForOverlaps = (
-      startDate: Temporal.PlainDate,
-      endDate: Temporal.PlainDate,
+      offStart: Temporal.PlainDate,
+      offEnd: Temporal.PlainDate,
       existingPeriods: VacationPeriod[],
       minGapBetweenPeriods: number,
     ): boolean => {
-      const bufferStartDate = startDate.subtract({
+      const bufferStart = offStart.subtract({
         days: minGapBetweenPeriods,
       });
-      const bufferEndDate = endDate.add({ days: minGapBetweenPeriods });
+      const bufferEnd = offEnd.add({ days: minGapBetweenPeriods });
 
       for (const period of existingPeriods) {
         if (
-          Temporal.PlainDate.compare(bufferStartDate, period.endDate) <= 0 &&
-          Temporal.PlainDate.compare(bufferEndDate, period.startDate) >= 0
+          Temporal.PlainDate.compare(bufferStart, period.offEnd) <= 0 &&
+          Temporal.PlainDate.compare(bufferEnd, period.offStart) >= 0
         ) {
           return true;
         }
@@ -682,58 +676,60 @@ function VacationCalculator() {
     };
 
     const calculateTotalDaysOff = (period: VacationPeriod): number => {
-      const totalDays =
-        period.startDate.until(period.endDate, { largestUnit: "day" }).days + 1;
+      const totalDaysOff =
+        period.offStart.until(period.offEnd, { largestUnit: "day" }).days + 1;
 
-      return totalDays;
+      return totalDaysOff;
     };
 
     const findBestAvailablePeriods = (
-      startDate: Temporal.PlainDate,
-      endDate: Temporal.PlainDate,
+      windowStart: Temporal.PlainDate,
+      windowEnd: Temporal.PlainDate,
       existingPeriods: VacationPeriod[],
-      daysCount: number,
+      vacationDays: number,
       minGapBetweenPeriods: number = 3,
     ): VacationPeriod[] => {
-      let currentDate = startDate;
+      let currentDate = windowStart;
       const candidatePeriods: {
         period: VacationPeriod;
         totalDaysOff: number;
       }[] = [];
-      const maxSearchDate = endDate;
 
-      while (Temporal.PlainDate.compare(currentDate, maxSearchDate) <= 0) {
+      while (Temporal.PlainDate.compare(currentDate, windowEnd) <= 0) {
         if (
           currentDate.dayOfWeek !== 6 &&
           currentDate.dayOfWeek !== 7 &&
           !isHoliday(currentDate)
         ) {
-          const vacationStartDate = currentDate;
-          const vacationEndDate = vacationStartDate.add({
-            days: daysCount - 1,
+          const vacationStart = currentDate;
+          const vacationEnd = vacationStart.add({
+            days: vacationDays - 1,
           });
 
-          if (Temporal.PlainDate.compare(vacationEndDate, maxSearchDate) > 0) {
+          const offStart = calculateOffStart(vacationStart);
+          const offEnd = calculateOffEnd(vacationEnd);
+
+          if (Temporal.PlainDate.compare(offEnd, windowEnd) > 0) {
             break;
           }
 
-          const extraStartDate = calculateExtraStartDate(vacationStartDate);
-          const extraEndDate = calculateExtraEndDate(vacationEndDate);
+          const startsWithinWindow =
+            Temporal.PlainDate.compare(offStart, windowStart) >= 0;
 
           const overlaps = checkForOverlaps(
-            extraStartDate,
-            extraEndDate,
+            offStart,
+            offEnd,
             existingPeriods,
             minGapBetweenPeriods,
           );
 
-          if (!overlaps) {
+          if (startsWithinWindow && !overlaps) {
             const period: VacationPeriod = {
-              startDate: extraStartDate,
-              endDate: extraEndDate,
-              usedStartDate: vacationStartDate,
-              usedEndDate: vacationEndDate,
-              daysCount: daysCount,
+              offStart,
+              offEnd,
+              vacationStart,
+              vacationEnd,
+              vacationDays,
             };
 
             const totalDaysOff = calculateTotalDaysOff(period);
@@ -756,10 +752,12 @@ function VacationCalculator() {
         }
 
         const diffA = Math.abs(
-          startDate.until(a.period.usedStartDate, { largestUnit: "day" }).days,
+          windowStart.until(a.period.vacationStart, { largestUnit: "day" })
+            .days,
         );
         const diffB = Math.abs(
-          startDate.until(b.period.usedStartDate, { largestUnit: "day" }).days,
+          windowStart.until(b.period.vacationStart, { largestUnit: "day" })
+            .days,
         );
         return diffA - diffB;
       });
@@ -780,8 +778,8 @@ function VacationCalculator() {
     for (const vacationDays of dayCounts) {
       try {
         const periods = findBestAvailablePeriods(
-          currentStartDate,
-          searchEndDate,
+          windowStart,
+          windowEnd,
           [],
           vacationDays,
           0,
@@ -795,22 +793,19 @@ function VacationCalculator() {
     }
 
     const filteredPeriods = allCandidatePeriods.filter((period) => {
-      const totalDays = calculateTotalDaysOff(period);
-      const extraDays = totalDays - period.daysCount;
+      const extraDays = calculateTotalDaysOff(period) - period.vacationDays;
       return extraDays > 0;
     });
 
     filteredPeriods.sort((a, b) => {
-      const totalDaysA = calculateTotalDaysOff(a);
-      const totalDaysB = calculateTotalDaysOff(b);
-      const extraDaysA = totalDaysA - a.daysCount;
-      const extraDaysB = totalDaysB - b.daysCount;
+      const extraDaysA = calculateTotalDaysOff(a) - a.vacationDays;
+      const extraDaysB = calculateTotalDaysOff(b) - b.vacationDays;
 
       if (extraDaysB !== extraDaysA) {
         return extraDaysB - extraDaysA;
       }
 
-      return Temporal.PlainDate.compare(a.usedStartDate, b.usedStartDate);
+      return Temporal.PlainDate.compare(a.vacationStart, b.vacationStart);
     });
 
     setVacationPeriods(filteredPeriods);
@@ -831,17 +826,17 @@ function VacationCalculator() {
     }
   }, []);
 
-  const handleStartDateChange = (date: Temporal.PlainDate | null): void => {
+  const handleWindowStartChange = (date: Temporal.PlainDate | null): void => {
     setFormData({
       ...formData,
-      startDate: date,
+      windowStart: date,
     });
   };
 
-  const handleEndDateChange = (date: Temporal.PlainDate | null): void => {
+  const handleWindowEndChange = (date: Temporal.PlainDate | null): void => {
     setFormData({
       ...formData,
-      endDate: date,
+      windowEnd: date,
     });
   };
 
@@ -861,33 +856,33 @@ function VacationCalculator() {
     });
   };
 
-  const getStartDateErrorMessage = (): string | null => {
-    if (!formData.startDate) {
-      return "Please enter a valid start date";
+  const getWindowStartErrorMessage = (): string | null => {
+    if (!formData.windowStart) {
+      return "Please enter a valid window start";
     }
     return null;
   };
 
-  const getEndDateErrorMessage = (): string | null => {
-    if (!formData.endDate) {
-      return "Please enter a valid end date";
+  const getWindowEndErrorMessage = (): string | null => {
+    if (!formData.windowEnd) {
+      return "Please enter a valid window end";
     }
     if (
-      formData.startDate &&
-      formData.endDate &&
-      Temporal.PlainDate.compare(formData.endDate, formData.startDate) <= 0
+      formData.windowStart &&
+      formData.windowEnd &&
+      Temporal.PlainDate.compare(formData.windowEnd, formData.windowStart) <= 0
     ) {
-      return "End date must be after start date";
+      return "Window end must be after window start";
     }
     return null;
   };
 
   function CalendarMonth({
     month,
-    startDate,
-    endDate,
-    usedStartDate,
-    usedEndDate,
+    offStart,
+    offEnd,
+    vacationStart,
+    vacationEnd,
     dayNames,
   }: CalendarMonthProps) {
     const monthName = month.toLocaleString(undefined, { month: "long" });
@@ -946,17 +941,17 @@ function VacationCalculator() {
 
             const isVacationDay = isWithinRange(
               currentDate,
-              usedStartDate,
-              usedEndDate,
+              vacationStart,
+              vacationEnd,
             );
 
             const isAroundVacation =
               isWithinRange(
                 currentDate,
-                startDate,
-                usedStartDate.subtract({ days: 1 }),
+                offStart,
+                vacationStart.subtract({ days: 1 }),
               ) ||
-              isWithinRange(currentDate, usedEndDate.add({ days: 1 }), endDate);
+              isWithinRange(currentDate, vacationEnd.add({ days: 1 }), offEnd);
 
             const isExtraDay =
               isAroundVacation &&
@@ -980,28 +975,25 @@ function VacationCalculator() {
   }
 
   function CalendarView({
-    startDate,
-    endDate,
-    usedStartDate,
-    usedEndDate,
-    daysCount,
+    offStart,
+    offEnd,
+    vacationStart,
+    vacationEnd,
+    vacationDays,
   }: CalendarViewProps) {
     const months: Temporal.PlainDate[] = [];
-    const displayStart = startDate;
-    const displayEnd = endDate;
-    let currentMonth = displayStart.with({ day: 1 });
-    const lastMonth = displayEnd.with({ day: 1 });
+    let currentMonth = offStart.with({ day: 1 });
+    const lastMonth = offEnd.with({ day: 1 });
 
     while (Temporal.PlainDate.compare(currentMonth, lastMonth) <= 0) {
       months.push(currentMonth);
       currentMonth = currentMonth.add({ months: 1 });
     }
 
-    const usedDays = daysCount;
+    const totalDaysOff =
+      offStart.until(offEnd, { largestUnit: "day" }).days + 1;
 
-    const totalDays = startDate.until(endDate, { largestUnit: "day" }).days + 1;
-
-    const extraDays = totalDays - usedDays;
+    const extraDays = totalDaysOff - vacationDays;
 
     const formatDate = (date: Temporal.PlainDate): string => {
       const day = date.day.toString().padStart(2, "0");
@@ -1013,28 +1005,46 @@ function VacationCalculator() {
     return (
       <div className="space-y-6">
         <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg p-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2 text-center">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2 text-center">
             <div className="bg-white dark:bg-gray-800 p-2 rounded shadow-sm">
               <div className="text-xs text-gray-500 dark:text-gray-400">
-                Start
+                Off Start
               </div>
               <div className="text-gray-900 dark:text-gray-100">
-                {formatDate(usedStartDate)}
+                {formatDate(offStart)}
               </div>
             </div>
             <div className="bg-white dark:bg-gray-800 p-2 rounded shadow-sm">
               <div className="text-xs text-gray-500 dark:text-gray-400">
-                End
+                Vacation Start
               </div>
               <div className="text-gray-900 dark:text-gray-100">
-                {formatDate(usedEndDate)}
+                {formatDate(vacationStart)}
+              </div>
+            </div>
+            <div className="bg-white dark:bg-gray-800 p-2 rounded shadow-sm">
+              <div className="text-xs text-gray-500 dark:text-gray-400">
+                Vacation End
+              </div>
+              <div className="text-gray-900 dark:text-gray-100">
+                {formatDate(vacationEnd)}
+              </div>
+            </div>
+            <div className="bg-white dark:bg-gray-800 p-2 rounded shadow-sm">
+              <div className="text-xs text-gray-500 dark:text-gray-400">
+                Off End
+              </div>
+              <div className="text-gray-900 dark:text-gray-100">
+                {formatDate(offEnd)}
               </div>
             </div>
             <div className="bg-white dark:bg-gray-800 p-2 rounded shadow-sm">
               <div className="text-xs text-gray-500 dark:text-gray-400">
                 Vacation Days
               </div>
-              <div className="text-gray-900 dark:text-gray-100">{usedDays}</div>
+              <div className="text-gray-900 dark:text-gray-100">
+                {vacationDays}
+              </div>
             </div>
             <div className="bg-white dark:bg-gray-800 p-2 rounded shadow-sm">
               <div className="text-xs text-gray-500 dark:text-gray-400">
@@ -1046,10 +1056,10 @@ function VacationCalculator() {
             </div>
             <div className="bg-white dark:bg-gray-800 p-2 rounded shadow-sm">
               <div className="text-xs text-gray-500 dark:text-gray-400">
-                Total Days
+                Total Days Off
               </div>
               <div className="text-gray-900 dark:text-gray-100">
-                {totalDays}
+                {totalDaysOff}
               </div>
             </div>
           </div>
@@ -1060,10 +1070,10 @@ function VacationCalculator() {
             <CalendarMonth
               key={monthIndex}
               month={month}
-              startDate={startDate}
-              endDate={endDate}
-              usedStartDate={usedStartDate}
-              usedEndDate={usedEndDate}
+              offStart={offStart}
+              offEnd={offEnd}
+              vacationStart={vacationStart}
+              vacationEnd={vacationEnd}
               dayNames={DAY_NAMES}
             />
           ))}
@@ -1173,7 +1183,7 @@ function VacationCalculator() {
                   <div className="space-y-2">
                     <label className="block text-gray-700 dark:text-gray-300">
                       <span className="inline-block mr-2">📅</span> Holidays in
-                      date range
+                      window
                     </label>
                     <div className="h-48 overflow-y-auto rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700/50">
                       {formData.holidayTypes.size === 0 ? (
@@ -1182,19 +1192,19 @@ function VacationCalculator() {
                         </div>
                       ) : (
                         (() => {
-                          const { startDate, endDate } = formData;
-                          const inRange =
-                            startDate && endDate
+                          const { windowStart, windowEnd } = formData;
+                          const inWindow =
+                            windowStart && windowEnd
                               ? holidays
                                   .filter(
                                     (h) =>
                                       Temporal.PlainDate.compare(
                                         h.date,
-                                        startDate,
+                                        windowStart,
                                       ) >= 0 &&
                                       Temporal.PlainDate.compare(
                                         h.date,
-                                        endDate,
+                                        windowEnd,
                                       ) <= 0,
                                   )
                                   .sort((a, b) =>
@@ -1203,9 +1213,9 @@ function VacationCalculator() {
                               : [];
                           const formatDate = (d: Temporal.PlainDate) =>
                             `${d.day.toString().padStart(2, "0")}/${d.month.toString().padStart(2, "0")}/${d.year}`;
-                          return inRange.length === 0 ? (
+                          return inWindow.length === 0 ? (
                             <div className="p-3 text-sm text-gray-500 dark:text-gray-400">
-                              No holidays in the selected date range.
+                              No holidays in the selected window.
                             </div>
                           ) : (
                             <table className="w-full text-sm text-left">
@@ -1220,7 +1230,7 @@ function VacationCalculator() {
                                 </tr>
                               </thead>
                               <tbody>
-                                {inRange.map((h, i) => (
+                                {inWindow.map((h, i) => (
                                   <tr
                                     key={`${h.date.toString()}-${i}`}
                                     className="border-t border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-100"
@@ -1335,20 +1345,20 @@ function VacationCalculator() {
 
                 <FormSection>
                   <DateField
-                    label="Start Date"
-                    name="startDate"
-                    value={formData.startDate}
-                    tooltip="First date to consider for vacation planning"
-                    onChange={handleStartDateChange}
-                    errorMessage={getStartDateErrorMessage()}
+                    label="Window Start"
+                    name="windowStart"
+                    value={formData.windowStart}
+                    tooltip="Earliest date your time off can start, including weekends and holidays"
+                    onChange={handleWindowStartChange}
+                    errorMessage={getWindowStartErrorMessage()}
                   />
                   <DateField
-                    label="End Date"
-                    name="endDate"
-                    value={formData.endDate}
-                    tooltip="Last date to consider for vacation planning"
-                    onChange={handleEndDateChange}
-                    errorMessage={getEndDateErrorMessage()}
+                    label="Window End"
+                    name="windowEnd"
+                    value={formData.windowEnd}
+                    tooltip="Latest date your time off can end, including weekends and holidays"
+                    onChange={handleWindowEndChange}
+                    errorMessage={getWindowEndErrorMessage()}
                   />
                 </FormSection>
               </div>
@@ -1382,11 +1392,11 @@ function VacationCalculator() {
                   >();
 
                   vacationPeriods.forEach((period) => {
-                    const totalDays =
-                      period.startDate.until(period.endDate, {
+                    const totalDaysOff =
+                      period.offStart.until(period.offEnd, {
                         largestUnit: "day",
                       }).days + 1;
-                    const extraDays = totalDays - period.daysCount;
+                    const extraDays = totalDaysOff - period.vacationDays;
 
                     if (!periodsByExtraDays.has(extraDays)) {
                       periodsByExtraDays.set(extraDays, []);
@@ -1469,11 +1479,12 @@ function VacationCalculator() {
                                       >
                                         <div className="flex items-center space-x-4">
                                           <span className="text-gray-700 dark:text-gray-300">
-                                            {formatDate(period.usedStartDate)} -{" "}
-                                            {formatDate(period.usedEndDate)}
+                                            {formatDate(period.vacationStart)} -{" "}
+                                            {formatDate(period.vacationEnd)}
                                           </span>
                                           <span className="text-sm text-gray-500 dark:text-gray-400">
-                                            ({period.daysCount} vacation days)
+                                            ({period.vacationDays} vacation
+                                            days)
                                           </span>
                                         </div>
                                         <span className="text-gray-400 dark:text-gray-500">
@@ -1485,11 +1496,11 @@ function VacationCalculator() {
                                       {isPeriodExpanded && (
                                         <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-200 dark:border-gray-700">
                                           <CalendarView
-                                            startDate={period.startDate}
-                                            endDate={period.endDate}
-                                            usedStartDate={period.usedStartDate}
-                                            usedEndDate={period.usedEndDate}
-                                            daysCount={period.daysCount}
+                                            offStart={period.offStart}
+                                            offEnd={period.offEnd}
+                                            vacationStart={period.vacationStart}
+                                            vacationEnd={period.vacationEnd}
+                                            vacationDays={period.vacationDays}
                                           />
                                         </div>
                                       )}
