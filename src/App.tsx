@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useId } from "react";
+import { useMemo, useState, useEffect, useId, useRef } from "react";
 import type { ReactNode } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Label from "@radix-ui/react-label";
@@ -6,6 +6,7 @@ import * as Select from "@radix-ui/react-select";
 import Holidays from "date-holidays";
 import type { HolidaysTypes } from "date-holidays";
 import { Temporal } from "temporal-polyfill";
+import { useFormUrlState, type FormData } from "./urlState";
 
 const hd = new Holidays();
 
@@ -46,20 +47,6 @@ const HOLIDAY_TYPE_OPTIONS: Record<
 interface Holiday {
   date: Temporal.PlainDate;
   name: string;
-}
-
-type VacationDaysMode = "range" | "list";
-
-interface FormData {
-  workCountry: string;
-  workState: string;
-  vacationDaysMode: VacationDaysMode;
-  minVacationDays: number;
-  maxVacationDays: number;
-  vacationDaysList: number[];
-  startDate: Temporal.PlainDate | null;
-  endDate: Temporal.PlainDate | null;
-  holidayTypes: Set<HolidaysTypes.HolidayType>;
 }
 
 interface VacationPeriod {
@@ -523,7 +510,8 @@ function VacationCalculator() {
   const [expandedExtraDays, setExpandedExtraDays] = useState<Set<number>>(
     new Set(),
   );
-  const [daysListRaw, setDaysListRaw] = useState<string>("5, 10, 15");
+  const { formData, setFormData, daysListRaw, setDaysListRaw } =
+    useFormUrlState();
   const [isDark, setIsDark] = useState<boolean>(
     () =>
       typeof document !== "undefined" &&
@@ -541,26 +529,6 @@ function VacationCalculator() {
   const [expandedPeriods, setExpandedPeriods] = useState<Set<string>>(
     new Set(),
   );
-
-  const getCurrentDate = (): Temporal.PlainDate => {
-    return Temporal.Now.plainDateISO();
-  };
-
-  const getDateOneYearFromNow = (): Temporal.PlainDate => {
-    return Temporal.Now.plainDateISO().add({ years: 1 });
-  };
-
-  const [formData, setFormData] = useState<FormData>({
-    workCountry: "BR",
-    workState: "",
-    vacationDaysMode: "range",
-    minVacationDays: 5,
-    maxVacationDays: 30,
-    vacationDaysList: [5, 10, 15],
-    startDate: getCurrentDate(),
-    endDate: getDateOneYearFromNow(),
-    holidayTypes: new Set(["public"]),
-  });
 
   const holidays = useMemo(() => {
     if (!formData.startDate || !formData.endDate) {
@@ -852,6 +820,17 @@ function VacationCalculator() {
     setExpandedPeriods(new Set());
     setIsDrawerOpen(false);
   };
+
+  const handleCalculateRef = useRef(handleCalculate);
+  handleCalculateRef.current = handleCalculate;
+  const hasErrorsRef = useRef(hasErrors);
+  hasErrorsRef.current = hasErrors;
+
+  useEffect(() => {
+    if (!hasErrorsRef.current()) {
+      handleCalculateRef.current();
+    }
+  }, []);
 
   const handleStartDateChange = (date: Temporal.PlainDate | null): void => {
     setFormData({
