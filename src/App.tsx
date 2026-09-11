@@ -5,7 +5,6 @@ import * as Label from "@radix-ui/react-label";
 import * as Select from "@radix-ui/react-select";
 import Holidays from "date-holidays";
 import type { HolidaysTypes } from "date-holidays";
-import { Temporal } from "temporal-polyfill";
 import { useFormUrlState, type FormData } from "./urlState";
 
 const hd = new Holidays();

@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import type { HolidaysTypes } from "date-holidays";
-import { Temporal } from "temporal-polyfill";
 
 export type VacationDaysMode = "range" | "list";
 

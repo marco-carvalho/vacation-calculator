@@ -20,8 +20,7 @@
     "date-holidays": "3.26.5",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "tailwindcss": "4.3.3",
-    "temporal-polyfill": "1.0.1"
+    "tailwindcss": "4.3.3"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "6.9.1",
