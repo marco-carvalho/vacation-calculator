@@ -706,15 +706,12 @@ function VacationCalculator() {
             days: vacationDays - 1,
           });
 
-          const offStart = calculateOffStart(vacationStart);
-          const offEnd = calculateOffEnd(vacationEnd);
-
-          if (Temporal.PlainDate.compare(offEnd, windowEnd) > 0) {
+          if (Temporal.PlainDate.compare(vacationEnd, windowEnd) > 0) {
             break;
           }
 
-          const startsWithinWindow =
-            Temporal.PlainDate.compare(offStart, windowStart) >= 0;
+          const offStart = calculateOffStart(vacationStart);
+          const offEnd = calculateOffEnd(vacationEnd);
 
           const overlaps = checkForOverlaps(
             offStart,
@@ -723,7 +720,7 @@ function VacationCalculator() {
             minGapBetweenPeriods,
           );
 
-          if (startsWithinWindow && !overlaps) {
+          if (!overlaps) {
             const period: VacationPeriod = {
               offStart,
               offEnd,
@@ -1348,7 +1345,7 @@ function VacationCalculator() {
                     label="Window Start"
                     name="windowStart"
                     value={formData.windowStart}
-                    tooltip="Earliest date your time off can start, including weekends and holidays"
+                    tooltip="Earliest date your vacation days can start; adjacent weekends and holidays may fall before it"
                     onChange={handleWindowStartChange}
                     errorMessage={getWindowStartErrorMessage()}
                   />
@@ -1356,7 +1353,7 @@ function VacationCalculator() {
                     label="Window End"
                     name="windowEnd"
                     value={formData.windowEnd}
-                    tooltip="Latest date your time off can end, including weekends and holidays"
+                    tooltip="Latest date your vacation days can end; adjacent weekends and holidays may fall after it"
                     onChange={handleWindowEndChange}
                     errorMessage={getWindowEndErrorMessage()}
                   />
