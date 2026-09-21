@@ -5,7 +5,15 @@ import * as Label from "@radix-ui/react-label";
 import * as Select from "@radix-ui/react-select";
 import Holidays from "date-holidays";
 import type { HolidaysTypes } from "date-holidays";
-import { useFormUrlState, type FormData } from "./urlState";
+import { z } from "zod";
+import {
+  formDataSchema,
+  holidayTypeSchema,
+  plainDateSchema,
+  useFormUrlState,
+  HOLIDAY_TYPE_OPTIONS,
+  type FormData,
+} from "./urlState";
 
 const hd = new Holidays();
 
@@ -15,137 +23,140 @@ const DAY_NAMES = Array.from({ length: 7 }, (_, i) =>
     .toLocaleString(undefined, { weekday: "short" }),
 );
 
-const HOLIDAY_TYPE_OPTIONS: Record<
-  HolidaysTypes.HolidayType,
-  { label: string; description: string }
-> = {
-  public: {
-    label: "Public Holidays",
-    description:
-      "National holidays with paid time off (e.g., New Year, Christmas)",
+const reactNodeSchema = z.custom<ReactNode>();
+const formDataKeySchema = formDataSchema.keyof();
+const formFieldChangeSchema = z.custom<
+  (name: keyof FormData, value: string) => void
+>((value) => typeof value === "function");
+
+const holidaySchema = z.object({
+  date: plainDateSchema,
+  name: z.string(),
+});
+type Holiday = z.infer<typeof holidaySchema>;
+
+const vacationPeriodSchema = z.object({
+  offStart: plainDateSchema,
+  offEnd: plainDateSchema,
+  vacationStart: plainDateSchema,
+  vacationEnd: plainDateSchema,
+  vacationDays: z.number(),
+});
+type VacationPeriod = z.infer<typeof vacationPeriodSchema>;
+
+const selectOptionSchema = z.object({
+  value: z.string(),
+  label: z.string(),
+});
+type SelectOption = z.infer<typeof selectOptionSchema>;
+
+const cardPropsSchema = z.object({
+  children: reactNodeSchema,
+  className: z.string().optional(),
+});
+type CardProps = z.infer<typeof cardPropsSchema>;
+
+const formSectionPropsSchema = z.object({
+  children: reactNodeSchema,
+});
+type FormSectionProps = z.infer<typeof formSectionPropsSchema>;
+
+const tooltipPropsSchema = z.object({
+  text: z.string(),
+});
+type TooltipProps = z.infer<typeof tooltipPropsSchema>;
+
+const warningMessagePropsSchema = z.object({
+  message: z.string(),
+});
+type WarningMessageProps = z.infer<typeof warningMessagePropsSchema>;
+
+const numberInputFieldPropsSchema = z.object({
+  label: z.string(),
+  name: formDataKeySchema,
+  value: z.number(),
+  icon: z.string(),
+  min: z.number().optional(),
+  tooltip: z.string().nullable().optional(),
+  errorMessage: z.string().nullable().optional(),
+});
+
+const selectFieldPropsSchema = z.object({
+  label: z.string(),
+  name: formDataKeySchema,
+  value: z.string(),
+  icon: z.string(),
+  options: z.array(selectOptionSchema),
+  tooltip: z.string().nullable().optional(),
+});
+
+const dateFieldPropsSchema = z.object({
+  label: z.string(),
+  name: formDataKeySchema,
+  value: plainDateSchema.nullable(),
+  tooltip: z.string().nullable().optional(),
+  errorMessage: z.string().nullable().optional(),
+});
+
+const calendarMonthPropsSchema = z.object({
+  month: plainDateSchema,
+  offStart: plainDateSchema,
+  offEnd: plainDateSchema,
+  vacationStart: plainDateSchema,
+  vacationEnd: plainDateSchema,
+  dayNames: z.array(z.string()),
+});
+type CalendarMonthProps = z.infer<typeof calendarMonthPropsSchema>;
+
+const calendarViewPropsSchema = z.object({
+  offStart: plainDateSchema,
+  offEnd: plainDateSchema,
+  vacationStart: plainDateSchema,
+  vacationEnd: plainDateSchema,
+  vacationDays: z.number(),
+});
+type CalendarViewProps = z.infer<typeof calendarViewPropsSchema>;
+
+const numberInputFieldComponentPropsSchema = numberInputFieldPropsSchema.extend(
+  {
+    onChange: formFieldChangeSchema,
   },
-  bank: {
-    label: "Bank Holidays",
-    description: "Banking sector holidays",
-  },
-  school: {
-    label: "School Holidays",
-    description: "School breaks and recesses",
-  },
-  observance: {
-    label: "Observances",
-    description:
-      "Commemorative dates without paid time off (e.g., Valentine's Day)",
-  },
-  optional: {
-    label: "Optional Holidays",
-    description: "Optional holidays that may vary by employer",
-  },
-};
+);
+type NumberInputFieldComponentProps = z.infer<
+  typeof numberInputFieldComponentPropsSchema
+>;
 
-interface Holiday {
-  date: Temporal.PlainDate;
-  name: string;
-}
+const selectFieldComponentPropsSchema = selectFieldPropsSchema.extend({
+  onChange: formFieldChangeSchema,
+});
+type SelectFieldComponentProps = z.infer<
+  typeof selectFieldComponentPropsSchema
+>;
 
-interface VacationPeriod {
-  offStart: Temporal.PlainDate;
-  offEnd: Temporal.PlainDate;
-  vacationStart: Temporal.PlainDate;
-  vacationEnd: Temporal.PlainDate;
-  vacationDays: number;
-}
+const dateFieldComponentPropsSchema = dateFieldPropsSchema.extend({
+  onChange: z.custom<(date: Temporal.PlainDate | null) => void>(
+    (value) => typeof value === "function",
+  ),
+});
+type DateFieldComponentProps = z.infer<typeof dateFieldComponentPropsSchema>;
 
-interface SelectOption {
-  value: string;
-  label: string;
-}
-
-interface CardProps {
-  children: ReactNode;
-  className?: string;
-}
-
-interface FormSectionProps {
-  children: ReactNode;
-}
-
-interface TooltipProps {
-  text: string;
-}
-
-interface WarningMessageProps {
-  message: string;
-}
-
-interface NumberInputFieldProps {
-  label: string;
-  name: keyof FormData;
-  value: number;
-  icon: string;
-  min?: number;
-  tooltip?: string | null;
-  errorMessage?: string | null;
-}
-
-interface SelectFieldProps {
-  label: string;
-  name: keyof FormData;
-  value: string;
-  icon: string;
-  options: SelectOption[];
-  tooltip?: string | null;
-}
-
-interface DateFieldProps {
-  label: string;
-  name: keyof FormData;
-  value: Temporal.PlainDate | null;
-  tooltip?: string | null;
-  errorMessage?: string | null;
-}
-
-interface CalendarMonthProps {
-  month: Temporal.PlainDate;
-  offStart: Temporal.PlainDate;
-  offEnd: Temporal.PlainDate;
-  vacationStart: Temporal.PlainDate;
-  vacationEnd: Temporal.PlainDate;
-  dayNames: string[];
-}
-
-interface CalendarViewProps {
-  offStart: Temporal.PlainDate;
-  offEnd: Temporal.PlainDate;
-  vacationStart: Temporal.PlainDate;
-  vacationEnd: Temporal.PlainDate;
-  vacationDays: number;
-}
-
-interface NumberInputFieldComponentProps extends NumberInputFieldProps {
-  onChange: (name: keyof FormData, value: string) => void;
-}
-
-interface SelectFieldComponentProps extends SelectFieldProps {
-  onChange: (name: keyof FormData, value: string) => void;
-}
-
-interface DateFieldComponentProps extends DateFieldProps {
-  onChange: (date: Temporal.PlainDate | null) => void;
-}
-
-interface CheckboxGroupProps {
-  label: string;
-  icon: string;
-  options: Array<{
-    value: HolidaysTypes.HolidayType;
-    label: string;
-    description: string;
-  }>;
-  selectedValues: Set<HolidaysTypes.HolidayType>;
-  onChange: (value: HolidaysTypes.HolidayType, checked: boolean) => void;
-  tooltip: string;
-}
+const checkboxGroupPropsSchema = z.object({
+  label: z.string(),
+  icon: z.string(),
+  options: z.array(
+    z.object({
+      value: holidayTypeSchema,
+      label: z.string(),
+      description: z.string(),
+    }),
+  ),
+  selectedValues: z.set(holidayTypeSchema),
+  onChange: z.custom<
+    (value: HolidaysTypes.HolidayType, checked: boolean) => void
+  >((value) => typeof value === "function"),
+  tooltip: z.string(),
+});
+type CheckboxGroupProps = z.infer<typeof checkboxGroupPropsSchema>;
 
 function Card({ children, className = "" }: CardProps) {
   return (
@@ -369,10 +380,11 @@ function CheckboxGroup({
   );
 }
 
-interface ThemeToggleButtonProps {
-  isDark: boolean;
-  onToggle: () => void;
-}
+const themeToggleButtonPropsSchema = z.object({
+  isDark: z.boolean(),
+  onToggle: z.custom<() => void>((value) => typeof value === "function"),
+});
+type ThemeToggleButtonProps = z.infer<typeof themeToggleButtonPropsSchema>;
 
 function ThemeToggleButton({ isDark, onToggle }: ThemeToggleButtonProps) {
   const label = isDark ? "Switch to light mode" : "Switch to dark mode";
@@ -417,9 +429,12 @@ function ThemeToggleButton({ isDark, onToggle }: ThemeToggleButtonProps) {
   );
 }
 
-interface OptionsTriggerButtonProps {
-  isOpen: boolean;
-}
+const optionsTriggerButtonPropsSchema = z.object({
+  isOpen: z.boolean(),
+});
+type OptionsTriggerButtonProps = z.infer<
+  typeof optionsTriggerButtonPropsSchema
+>;
 
 function OptionsTriggerButton({ isOpen }: OptionsTriggerButtonProps) {
   const label = isOpen ? "Close options" : "Open options";

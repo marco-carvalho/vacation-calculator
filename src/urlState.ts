@@ -1,33 +1,98 @@
 import { useEffect, useState } from "react";
 import type { HolidaysTypes } from "date-holidays";
+import { z } from "zod";
 
-export type VacationDaysMode = "range" | "list";
+export const HOLIDAY_TYPE_OPTIONS: Record<
+  HolidaysTypes.HolidayType,
+  { label: string; description: string }
+> = {
+  public: {
+    label: "Public Holidays",
+    description:
+      "National holidays with paid time off (e.g., New Year, Christmas)",
+  },
+  bank: {
+    label: "Bank Holidays",
+    description: "Banking sector holidays",
+  },
+  school: {
+    label: "School Holidays",
+    description: "School breaks and recesses",
+  },
+  observance: {
+    label: "Observances",
+    description:
+      "Commemorative dates without paid time off (e.g., Valentine's Day)",
+  },
+  optional: {
+    label: "Optional Holidays",
+    description: "Optional holidays that may vary by employer",
+  },
+};
 
-export interface FormData {
-  workCountry: string;
-  workState: string;
-  vacationDaysMode: VacationDaysMode;
-  minVacationDays: number;
-  maxVacationDays: number;
-  vacationDaysList: number[];
-  windowStart: Temporal.PlainDate | null;
-  windowEnd: Temporal.PlainDate | null;
-  holidayTypes: Set<HolidaysTypes.HolidayType>;
-}
+export const holidayTypeSchema = z.custom<HolidaysTypes.HolidayType>();
+export const vacationDaysModeSchema = z.enum(["range", "list"]);
+export const plainDateSchema = z.instanceof(Temporal.PlainDate);
 
-const HOLIDAY_TYPE_VALUES = [
-  "public",
-  "bank",
-  "school",
-  "observance",
-  "optional",
-] as const satisfies readonly HolidaysTypes.HolidayType[];
+export const formDataSchema = z.object({
+  workCountry: z.string(),
+  workState: z.string(),
+  vacationDaysMode: vacationDaysModeSchema,
+  minVacationDays: z.number().int().positive(),
+  maxVacationDays: z.number().int().positive(),
+  vacationDaysList: z.array(z.number().int().positive()),
+  windowStart: plainDateSchema.nullable(),
+  windowEnd: plainDateSchema.nullable(),
+  holidayTypes: z.set(holidayTypeSchema),
+});
 
-const HOLIDAY_TYPE_SET = new Set<string>(HOLIDAY_TYPE_VALUES);
+export type VacationDaysMode = z.infer<typeof vacationDaysModeSchema>;
+export type FormData = z.infer<typeof formDataSchema>;
+
+const positiveIntFromSearch = z
+  .string()
+  .transform((raw) => Number.parseInt(raw, 10))
+  .pipe(z.number().int().positive());
+
+const daysListFromSearch = z.string().transform((raw, ctx) => {
+  const parsed = raw
+    .split(",")
+    .map((part) => Number.parseInt(part.trim(), 10))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  if (parsed.length === 0) {
+    ctx.addIssue({ code: "custom", message: "empty" });
+    return z.NEVER;
+  }
+  return parsed;
+});
+
+const plainDateFromSearch = z.string().transform((raw, ctx) => {
+  try {
+    return Temporal.PlainDate.from(raw);
+  } catch {
+    ctx.addIssue({ code: "custom", message: "invalid date" });
+    return z.NEVER;
+  }
+});
+
+const holidayTypesFromSearch = z.string().transform((raw) => {
+  if (raw === "") {
+    return new Set<HolidaysTypes.HolidayType>();
+  }
+  return new Set(
+    raw
+      .split(",")
+      .map((part) => part.trim())
+      .filter(
+        (part): part is HolidaysTypes.HolidayType =>
+          part in HOLIDAY_TYPE_OPTIONS,
+      ),
+  );
+});
 
 export function getDefaultFormData(): FormData {
   const today = Temporal.Now.plainDateISO();
-  return {
+  return formDataSchema.parse({
     workCountry: "BR",
     workState: "",
     vacationDaysMode: "range",
@@ -37,71 +102,27 @@ export function getDefaultFormData(): FormData {
     windowStart: today,
     windowEnd: today.add({ years: 1 }),
     holidayTypes: new Set(["public"]),
-  };
+  });
 }
 
-function parseDate(raw: string | null): Temporal.PlainDate | null {
-  if (!raw) {
-    return null;
-  }
-  try {
-    return Temporal.PlainDate.from(raw);
-  } catch {
-    return null;
-  }
-}
-
-function parsePositiveInt(raw: string | null, fallback: number): number {
-  if (raw == null || raw === "") {
-    return fallback;
-  }
-  const value = Number.parseInt(raw, 10);
-  if (!Number.isFinite(value) || value <= 0) {
-    return fallback;
-  }
-  return value;
-}
-
-function parseDaysList(raw: string | null, fallback: number[]): number[] {
-  if (raw == null || raw === "") {
-    return fallback;
-  }
-  const parsed = raw
-    .split(",")
-    .map((part) => Number.parseInt(part.trim(), 10))
-    .filter((value) => Number.isFinite(value) && value > 0);
-  return parsed.length > 0 ? parsed : fallback;
-}
-
-function isHolidayType(value: string): value is HolidaysTypes.HolidayType {
-  return HOLIDAY_TYPE_SET.has(value);
-}
-
-function parseHolidayTypes(
-  raw: string | null,
-  fallback: Set<HolidaysTypes.HolidayType>,
-): Set<HolidaysTypes.HolidayType> {
-  if (raw == null) {
-    return new Set(fallback);
-  }
-  if (raw === "") {
-    return new Set();
-  }
-  const types = raw
-    .split(",")
-    .map((part) => part.trim())
-    .filter(isHolidayType);
-  return new Set(types);
-}
-
-function parseMode(
-  raw: string | null,
-  fallback: VacationDaysMode,
-): VacationDaysMode {
-  if (raw === "list" || raw === "range") {
-    return raw;
-  }
-  return fallback;
+function searchFormSchema(defaults: FormData) {
+  return z.object({
+    workCountry: z.string().catch(defaults.workCountry),
+    workState: z.string().catch(defaults.workState),
+    vacationDaysMode: vacationDaysModeSchema.catch(defaults.vacationDaysMode),
+    minVacationDays: positiveIntFromSearch.catch(defaults.minVacationDays),
+    maxVacationDays: positiveIntFromSearch.catch(defaults.maxVacationDays),
+    vacationDaysList: daysListFromSearch.catch(defaults.vacationDaysList),
+    windowStart: plainDateFromSearch.catch(
+      () => defaults.windowStart ?? Temporal.Now.plainDateISO(),
+    ),
+    windowEnd: plainDateFromSearch.catch(
+      () => defaults.windowEnd ?? Temporal.Now.plainDateISO(),
+    ),
+    holidayTypes: holidayTypesFromSearch.catch(
+      () => new Set(defaults.holidayTypes),
+    ),
+  });
 }
 
 export function parseFormDataFromSearch(search: string): FormData {
@@ -109,29 +130,17 @@ export function parseFormDataFromSearch(search: string): FormData {
     search.startsWith("?") ? search.slice(1) : search,
   );
   const defaults = getDefaultFormData();
-  return {
-    workCountry: params.get("country") ?? defaults.workCountry,
-    workState: params.get("state") ?? defaults.workState,
-    vacationDaysMode: parseMode(params.get("mode"), defaults.vacationDaysMode),
-    minVacationDays: parsePositiveInt(
-      params.get("min"),
-      defaults.minVacationDays,
-    ),
-    maxVacationDays: parsePositiveInt(
-      params.get("max"),
-      defaults.maxVacationDays,
-    ),
-    vacationDaysList: parseDaysList(
-      params.get("days"),
-      defaults.vacationDaysList,
-    ),
-    windowStart: parseDate(params.get("start")) ?? defaults.windowStart,
-    windowEnd: parseDate(params.get("end")) ?? defaults.windowEnd,
-    holidayTypes: parseHolidayTypes(
-      params.get("holidays"),
-      defaults.holidayTypes,
-    ),
-  };
+  return searchFormSchema(defaults).parse({
+    workCountry: params.get("workCountry"),
+    workState: params.get("workState"),
+    vacationDaysMode: params.get("vacationDaysMode"),
+    minVacationDays: params.get("minVacationDays"),
+    maxVacationDays: params.get("maxVacationDays"),
+    vacationDaysList: params.get("vacationDaysList"),
+    windowStart: params.get("windowStart"),
+    windowEnd: params.get("windowEnd"),
+    holidayTypes: params.get("holidayTypes"),
+  });
 }
 
 function sameDate(
@@ -180,56 +189,56 @@ export function serializeFormData(form: FormData): string {
 
   setIfChanged(
     params,
-    "country",
+    "workCountry",
     form.workCountry,
     form.workCountry !== defaults.workCountry,
   );
   setIfChanged(
     params,
-    "state",
+    "workState",
     form.workState,
     form.workState !== defaults.workState,
   );
   setIfChanged(
     params,
-    "mode",
+    "vacationDaysMode",
     form.vacationDaysMode,
     form.vacationDaysMode !== defaults.vacationDaysMode,
   );
   setIfChanged(
     params,
-    "min",
+    "minVacationDays",
     String(form.minVacationDays),
     form.minVacationDays !== defaults.minVacationDays,
   );
   setIfChanged(
     params,
-    "max",
+    "maxVacationDays",
     String(form.maxVacationDays),
     form.maxVacationDays !== defaults.maxVacationDays,
   );
   setIfChanged(
     params,
-    "days",
+    "vacationDaysList",
     form.vacationDaysList.join(","),
     !sameNumberList(form.vacationDaysList, defaults.vacationDaysList),
   );
   setIfChanged(
     params,
-    "start",
+    "windowStart",
     form.windowStart?.toString() ?? "",
     !sameDate(form.windowStart, defaults.windowStart) &&
       form.windowStart != null,
   );
   setIfChanged(
     params,
-    "end",
+    "windowEnd",
     form.windowEnd?.toString() ?? "",
     !sameDate(form.windowEnd, defaults.windowEnd) && form.windowEnd != null,
   );
   setIfChanged(
     params,
-    "holidays",
+    "holidayTypes",
     [...form.holidayTypes].join(","),
     !sameHolidayTypes(form.holidayTypes, defaults.holidayTypes),
   );
